@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 앱 본체(샌드박스 아님)용. 위젯과 같은 그룹이라야 macOS 가 묻지 않고 컨테이너에 쓰게 해 준다.
+	     위젯이 들어가는 빌드에만 붙인다(build.sh). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>88DH2SR88S.io.github.haewonkr.flick</string>
+	</array>
+</dict>
+</plist>

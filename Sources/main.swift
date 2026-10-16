@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import WidgetKit
 
 func showAlert(_ title: String, _ text: String) {
     let alert = NSAlert()
@@ -20,6 +21,22 @@ var launchAtLogin: Bool {
         } catch {
             showAlert(L("로그인 시 자동 실행을 바꾸지 못했습니다"), error.localizedDescription)
         }
+    }
+}
+
+/// 그대로 둔 파일 · 기록 · 언어가 바뀌면 부른다. 위젯이 읽는 상태 파일을 새로 쓰고, 바뀌었을 때만 다시 그리게 한다.
+func refreshWidgets() {
+    // 위젯은 팀 ID 로 서명한 빌드에만 들어간다(build.sh). 없으면 그룹 컨테이너를 건드리지 않는다 —
+    // 자격 없이 남의 그룹 컨테이너를 열면 macOS 가 다른 앱의 데이터에 접근하려 한다고 묻는다.
+    guard let plugins = Bundle.main.builtInPlugInsURL,
+          FileManager.default.fileExists(atPath: plugins.appendingPathComponent("FlickWidget.appex").path),
+          let file = FlickWidget.snapshotFile else { return }
+    let kept = UserDefaults.standard.stringArray(forKey: Coordinator.keptKey) ?? []
+    // days 0(영구)은 지우지 않고 읽기만 한다. 설정에서 보관 기간을 고르는 도중에 기록이 지워지면 안 된다 —
+    // 기간 정리는 지금처럼 실행할 때와 기록 탭을 열 때만.
+    let history = pruneHistory(days: 0)
+    if writeWidgetSnapshot(widgetSnapshot(kept: kept, history: history), to: file) {
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
 
@@ -169,6 +186,11 @@ var isTyping: Bool {
 final class KeyPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 
+    /// 유리는 창이 키 겉모습을 잃으면 스스로 흐려져 평범한 반투명 창이 된다.
+    /// 팝업은 키보드를 안 가져온 채로도 떠 있어야 해서, 유리일 때만 키 겉모습을 고정한다.
+    /// (hasKeyAppearance 는 비공개 API — 이름이 바뀌면 호출이 안 될 뿐, 지금 동작으로 돌아간다.)
+    @objc func hasKeyAppearance() -> Bool { glassActive || isKeyWindow }
+
     private var keySince = Date.distantPast
     override func becomeKey() {
         super.becomeKey()
@@ -284,7 +306,8 @@ struct PickerView: View {
     @State private var batch = false
     @State private var openAfter = openAfterMoveDefault
     /// 타이핑 중이라 키보드를 안 가져온 동안엔 부제 대신 클릭하라는 안내를 보인다.
-    @Environment(\.controlActiveState) private var activeState
+    /// KeyPanel 이 키 겉모습을 고정해 controlActiveState 가 늘 .key 라, 앱 활성 여부를 직접 본다.
+    @State private var appActive = NSApp.isActive
 
     private var name: String { renamedFilename(file.lastPathComponent, stem: draft ?? stem) }
 
@@ -321,7 +344,7 @@ struct PickerView: View {
                         .keyboardShortcut(KeyboardShortcut(.return, modifiers: []))
                         .help(L("이름 바꾸기"))
                     }
-                    Text(activeState == .inactive ? L("클릭하면 키로 고를 수 있습니다") : subtitle)
+                    Text(appActive ? subtitle : L("클릭하면 키로 고를 수 있습니다"))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -431,6 +454,8 @@ struct PickerView: View {
         .popupBackground(glass: glassActive)
         // 클로저가 State 저장소를 읽으므로 누른 순간의 이름·일괄·열기 상태로 옮긴다.
         .onAppear { level.onLeaf = { onMove($0, name, batch, openAfter) } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in appActive = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in appActive = false }
     }
 }
 
@@ -450,8 +475,9 @@ final class Coordinator: NSObject, NSWindowDelegate {
     /// 한 번에 옮긴 파일들의 (새 경로, 원래 폴더) 묶음, 최신이 앞. 일괄 옮기기는 한 묶음이라 한 번에 되돌린다.
     private(set) var recent: [[(dest: URL, origin: URL)]] = []
     /// esc 로 그대로 둔 파일 경로. 메뉴바 아이콘에 개수가 뜨고, 옮기거나 지우면 빠진다.
-    var kept = UserDefaults.standard.stringArray(forKey: "keptFiles") ?? [] {
-        didSet { UserDefaults.standard.set(kept, forKey: "keptFiles"); onKeptChange?() }
+    static let keptKey = "keptFiles"   // 위젯 상태를 쓸 때도 여기서 읽는다
+    var kept = UserDefaults.standard.stringArray(forKey: Coordinator.keptKey) ?? [] {
+        didSet { UserDefaults.standard.set(kept, forKey: Coordinator.keptKey); onKeptChange?() }
     }
     var onKeptChange: (() -> Void)?
 
@@ -505,14 +531,16 @@ final class Coordinator: NSObject, NSWindowDelegate {
         guard panel == nil, !queue.files.isEmpty else { return }
         let file = queue.files.removeFirst()
         guard let size = fileSize(file) else { seen.remove(file.path); showNext(); return }
-        let level = FolderLevel(presets: loadPresets())
+        let presets = loadPresets()
+        let level = FolderLevel(presets: presets)
         self.level = level
         let host = sourceURL(of: file).flatMap { URL(string: $0)?.host }
+        let subtitle = [ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file), host]
+            .compactMap { $0 }.joined(separator: " · ")
 
         let view = PickerView(
             file: file,
-            subtitle: [ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file), host]
-                .compactMap { $0 }.joined(separator: " · "),
+            subtitle: subtitle,
             level: level,
             queue: queue,
             onMove: { [weak self] in self?.finish(file, into: $0, as: $1, withQueue: $2, open: $3) },
@@ -557,6 +585,20 @@ final class Coordinator: NSObject, NSWindowDelegate {
         p.contentViewController = hosting   // 펼치면 창도 같이 커진다
         panel = p          // windowDidResize 보다 반드시 먼저
         current = file
+
+        // 노치에도 같은 파일을 올린다. 노치에서 고르면 팝업에서 고른 것과 같은 경로로 간다.
+        Lake.shared.onPick = { [weak self] preset in
+            guard let self, self.current == file else { return }
+            if let preset {
+                self.finish(file, into: preset.url, as: file.lastPathComponent,
+                            withQueue: false, open: openAfterMoveDefault)
+            } else {
+                self.keep(file, as: file.lastPathComponent)
+            }
+        }
+        Lake.shared.onUndo = { [weak self] in self?.undoLast() }
+        Lake.shared.show(file: file, subtitle: subtitle, presets: presets,
+                         queued: queue.files.count)
         // 크기를 지금 확정해야 최종 위치를 알고 거기로 밀어 넣을 수 있다.
         p.setContentSize(hosting.view.fittingSize)
         pinToTopRight(p)
@@ -640,7 +682,16 @@ final class Coordinator: NSObject, NSWindowDelegate {
                 failures.append("\(file.lastPathComponent)\n\(error.localizedDescription)")
             }
         }
-        if !moved.isEmpty { recent = Array(([moved] + recent).prefix(5)) }
+        if !moved.isEmpty {
+            recent = Array(([moved] + recent).prefix(5))
+            refreshWidgets()
+        }
+        if let first = moved.first, failures.isEmpty {
+            Lake.shared.finish("\(first.dest.lastPathComponent) → \(directory.lastPathComponent)",
+                               success: true)
+        } else if !failures.isEmpty {
+            Lake.shared.finish(L("옮기지 못했습니다"), success: false)
+        }
         if !failures.isEmpty {
             showAlert(L("옮기지 못했습니다"),
                       failures.joined(separator: "\n\n") + "\n\n" + L("파일은 원래 폴더에 그대로 있습니다."))
@@ -664,7 +715,19 @@ final class Coordinator: NSObject, NSWindowDelegate {
             }
         }
         if !kept.contains(path) { kept.append(path) }
+        Lake.shared.close()
         close()
+    }
+
+    /// 위젯에서 누른, 그대로 뒀던 파일을 새로 받은 파일과 같은 대기열에 넣는다.
+    /// flick:// 주소는 아무 앱이나 열 수 있어서, 사용자가 직접 남겨 둔 파일만 받는다.
+    func reopenKept(_ path: String) {
+        guard kept.contains(path) else { return }
+        kept.removeAll { $0 == path }   // 팝업에서 다시 그대로 두면 keep() 이 도로 넣는다
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        seen.insert(path)   // 기다리는 동안 이 경로로 이벤트가 와도 팝업이 두 번 뜨지 않게
+        queue.files.insert(URL(fileURLWithPath: path), at: 0)   // 누른 파일이 바로 다음 차례
+        showNext()
     }
 
     /// 밖에서 지우거나 옮긴 파일은 목록에서 뺀다.
@@ -750,9 +813,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pruneHistory()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        coordinator.onKeptChange = { [weak self] in self?.updateIcon() }
+        coordinator.onKeptChange = { [weak self] in
+            self?.updateIcon()
+            refreshWidgets()
+        }
         coordinator.pruneKept()   // 꺼져 있던 동안 치운 파일
         updateIcon()
+        refreshWidgets()   // 꺼져 있던 동안 기록이 기간을 넘겼을 수 있다
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -760,8 +827,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         updateWatcher()
         // 설정 창에서 감시 폴더를 바꾸면 바로 반영한다. 다른 설정이 바뀔 땐 경로가 같아 그냥 넘어간다.
+        // 언어를 바꾸면 위젯 문구도 바꾼다. 내용이 같으면 refreshWidgets 가 쓰지 않는다.
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
-                                               queue: .main) { [weak self] _ in self?.updateWatcher() }
+                                               queue: .main) { [weak self] _ in
+            self?.updateWatcher()
+            refreshWidgets()
+        }
         WelcomeWindow.shared.showIfFirstLaunch()
 
         checkForUpdate()
@@ -873,6 +944,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func revealRecent(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    /// 바탕화면 위젯의 행을 누르면 flick:// 주소로 온다. 꺼져 있었으면 이걸로 켜진다.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            switch WidgetLink(url: url) {
+            case .kept(let path)?: coordinator.reopenKept(path)
+            case .reveal(let path)?: reveal(path)
+            case nil: continue
+            }
+        }
+    }
+
+    /// 파일이 남아 있으면 Finder 에서 고르고, 나중에 지웠거나 옮겼으면 옮겼던 폴더를 연다.
+    /// 둘 다 Finder 창만 연다 — 주소에 앱 경로가 와도 실행되지 않는다.
+    private func reveal(_ path: String) {
+        if FileManager.default.fileExists(atPath: path) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        } else {
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: (path as NSString).deletingLastPathComponent)
+        }
     }
 
     @objc private func undoLast() { coordinator.undoLast() }

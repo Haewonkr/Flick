@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 위젯 확장은 샌드박스가 필수다. 앱이 쓴 상태 파일은 App Group 컨테이너로만 읽는다. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!-- 팀 ID 접두어 그룹은 프로비저닝 프로필 없이 쓸 수 있다. 서명한 팀과 같아야 한다(build.sh 가 확인). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>88DH2SR88S.io.github.haewonkr.flick</string>
+	</array>
+</dict>
+</plist>

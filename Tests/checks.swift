@@ -172,6 +172,40 @@ struct Checks {
         deleteHistory([at(10, "mid")], file: hfile)
         assert(pruneHistory(days: 0, now: now, file: hfile).map(\.name) == ["new"])
 
+        // 위젯 상태: 그대로 둔 파일은 최근 것이 앞, 기록은 최신순 그대로 limit 개, 예전 기록은 폴더 + 이름으로 짐작
+        let old1 = HistoryEntry(ts: now, name: "옛.pdf", ext: "pdf", from: "", dest: "/d", path: nil)
+        assert(old1.movedPath == "/d/옛.pdf")
+        let snap = widgetSnapshot(kept: ["/k/first", "/k/second"], history: [at(1, "new"), old1, at(10, "mid")], limit: 2)
+        assert(snap.kept == ["/k/second", "/k/first"], "\(snap.kept)")
+        assert(snap.moved.map(\.path) == ["/d/new", "/d/옛.pdf"], "\(snap.moved)")
+        assert(snap.locale == AppLanguage.current.rawValue && !snap.strings.keptTitle.isEmpty)
+        assert(String(format: snap.strings.more, 3).contains("3"))
+
+        // 같은 내용으로 다시 돌아오고, 깨진 파일은 nil
+        assert(WidgetSnapshot(data: snap.encoded()) == snap)
+        assert(WidgetSnapshot(data: Data("깨진 파일".utf8)) == nil)
+
+        // 내용이 같으면 다시 쓰지 않는다 — 위젯을 괜히 다시 그리지 않게
+        let wfile = URL(fileURLWithPath: "/tmp/flick-checks-widget/widget.json")
+        try? FileManager.default.removeItem(at: wfile.deletingLastPathComponent())
+        assert(writeWidgetSnapshot(snap, to: wfile))          // 폴더가 없어도 만들어 쓴다
+        assert(!writeWidgetSnapshot(snap, to: wfile))
+        var changed = snap
+        changed.kept.removeFirst()
+        assert(writeWidgetSnapshot(changed, to: wfile))
+        let written = try Data(contentsOf: wfile)
+        assert(WidgetSnapshot(data: written) == changed)
+
+        // 위젯 주소: 이상한 글자가 든 경로도 그대로 돌아오고, 엉뚱한 주소는 거른다
+        for path in ["/Users/a/Downloads/a&b=c+d #1 ?% 파일 (2).pdf", "/x/y.zip"] {
+            assert(WidgetLink(url: WidgetLink.kept(path).url) == .kept(path), path)
+            assert(WidgetLink(url: WidgetLink.reveal(path).url) == .reveal(path), path)
+        }
+        for bad in ["flick://kept?path=relative/x.pdf", "flick://open?path=/x", "flick://kept",
+                    "https://kept?path=/x", "flick://reveal?file=/x"] {
+            assert(WidgetLink(url: URL(string: bad)!) == nil, bad)
+        }
+
         // 번역: 코드의 L("…") 이 모두 표에 있고, 빈 번역이 없고, %ld 개수가 원문과 같다
         let sources = try FileManager.default.contentsOfDirectory(atPath: "Sources")
             .filter { $0.hasSuffix(".swift") && $0 != "Strings.swift" }

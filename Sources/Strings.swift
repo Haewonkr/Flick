@@ -173,6 +173,15 @@ let translations: [String: (en: String, de: String)] = [
         "Waiting files go to the same folder. A new name applies to this file only.",
         "Wartende Dateien landen im selben Ordner. Ein neuer Name gilt nur für diese Datei."),
 
+    // 바탕화면 위젯
+    "팝업에서 그대로 둔 파일입니다. 누르면 팝업이 다시 떠 옮길 수 있습니다.": (
+        "Files you left from the popup. Click one to bring the popup back and move it.",
+        "Im Pop-up liegen gelassene Dateien. Klicke eine an, um sie über das Pop-up zu verschieben."),
+    "남은 파일이 없습니다": ("Nothing Left Unfiled", "Alles einsortiert"),
+    "+%ld개 더": ("+%ld more", "+%ld weitere"),
+    "Flick으로 옮긴 파일입니다. 누르면 Finder에서 보여 줍니다.": ("Files moved with Flick. Click one to show it in Finder.",
+                                                 "Mit Flick verschobene Dateien. Klicke eine an, um sie im Finder zu zeigen."),
+
     // 알림
     "로그인 시 자동 실행을 바꾸지 못했습니다": ("Couldn’t change Launch at Login", "„Beim Anmelden starten“ konnte nicht geändert werden"),
     "옮기지 못했습니다": ("Couldn’t Move File", "Datei konnte nicht verschoben werden"),

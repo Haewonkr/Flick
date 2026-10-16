@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Flick</string>
+	<key>CFBundleExecutable</key>
+	<string>FlickLake</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.haewonkr.flick.lake</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FlickLake</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>3</string>
+	<key>DTPlatformName</key>
+	<string>macosx</string>
+	<key>DynamicLakeExtensionDescription</key>
+	<string>받은 파일을 어디로 옮길지 노치에서 고릅니다.</string>
+	<key>DynamicLakeExtensionDeveloperName</key>
+	<string>Haewonkr</string>
+	<key>DynamicLakeExtensionDisplayName</key>
+	<string>Flick</string>
+	<key>DynamicLakeExtensionWebsiteURL</key>
+	<string>https://github.com/Haewonkr/Flick</string>
+	<key>EXAppExtensionAttributes</key>
+	<dict>
+		<key>EXExtensionPointIdentifier</key>
+		<string>com.aviorrok.DynamicLakePro.DynamicLakePro.extension</string>
+	</dict>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+</dict>
+</plist>

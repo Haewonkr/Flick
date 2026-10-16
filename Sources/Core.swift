@@ -222,6 +222,9 @@ struct HistoryEntry: Codable, Hashable {
     let from: String      // 출처 URL, 없으면 ""
     let dest: String      // 옮긴 폴더
     var path: String?     // 옮긴 파일의 최종 경로(바꾼 이름·(2) 포함). 예전 기록엔 없다
+
+    /// 예전 기록엔 최종 경로가 없어 폴더 + 원래 이름으로 짐작한다.
+    var movedPath: String { path ?? (dest as NSString).appendingPathComponent(name) }
 }
 
 /// 설정 일반 탭에서 고르는 보관 기간(일). 0 은 영구, 고른 적 없으면 한 달.
@@ -282,4 +285,31 @@ func appendHistory(name: String, from: String?, dest: URL) {
         try? FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
         try? line.write(to: historyFile)
     }
+}
+
+// MARK: - 바탕화면 위젯
+
+/// 위젯이 읽을 상태. kept 는 그대로 둔 순서(오래된 것이 앞), history 는 pruneHistory 처럼 최신순.
+/// 기록은 큰 위젯 한 장(8줄)을 채울 만큼만 넘긴다.
+func widgetSnapshot(kept: [String], history: [HistoryEntry], limit: Int = 10) -> WidgetSnapshot {
+    WidgetSnapshot(
+        kept: kept.reversed(),
+        moved: history.prefix(limit).map { .init(path: $0.movedPath, date: $0.ts) },
+        locale: AppLanguage.current.rawValue,
+        // 위젯 제목은 이름처럼 쓰여 언어와 상관없이 영문 고정이다.
+        strings: .init(keptTitle: "Flick Inbox",
+                       keptDescription: L("팝업에서 그대로 둔 파일입니다. 누르면 팝업이 다시 떠 옮길 수 있습니다."),
+                       keptEmpty: L("남은 파일이 없습니다"),
+                       more: L("+%ld개 더"),
+                       movedTitle: "Flick History",
+                       movedDescription: L("Flick으로 옮긴 파일입니다. 누르면 Finder에서 보여 줍니다."),
+                       movedEmpty: L("옮긴 기록이 없습니다")))
+}
+
+/// 내용이 바뀌었을 때만 쓴다 — 같은 내용으로 위젯을 다시 그리게 하지 않으려고. 썼으면 true.
+func writeWidgetSnapshot(_ snapshot: WidgetSnapshot, to file: URL) -> Bool {
+    let data = snapshot.encoded()
+    guard (try? Data(contentsOf: file)) != data else { return false }
+    try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+    return (try? data.write(to: file, options: .atomic)) != nil
 }

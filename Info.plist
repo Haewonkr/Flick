@@ -17,15 +17,26 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1</string>
+	<string>1.2</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Haewonkr</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.github.haewonkr.flick</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flick</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>새로 받은 파일을 감지해 옮길 위치를 물어봅니다.</string>
 	<key>NSDesktopFolderUsageDescription</key>

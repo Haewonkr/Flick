@@ -229,6 +229,7 @@ struct HistoryList: View {
     private func delete(_ doomed: Set<HistoryEntry>) {
         deleteHistory(doomed)
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { entries = pruneHistory() }
+        refreshWidgets()
         selection.subtract(doomed)
     }
 
@@ -256,7 +257,10 @@ struct HistoryList: View {
         } message: {
             Text(L("옮긴 파일은 그대로 남습니다."))
         }
-        .onAppear { entries = pruneHistory() }   // 탭을 열 때마다 보관 기간을 적용하고 새로 읽는다
+        .onAppear {   // 탭을 열 때마다 보관 기간을 적용하고 새로 읽는다
+            entries = pruneHistory()
+            refreshWidgets()
+        }
     }
 
     private var list: some View {
@@ -264,8 +268,7 @@ struct HistoryList: View {
         ScrollView {
             LazyVStack(spacing: 6) {
                 ForEach(entries, id: \.self) { e in
-                    // 예전 기록엔 최종 경로가 없어 폴더 + 원래 이름으로 짐작한다.
-                    let url = URL(fileURLWithPath: e.path ?? (e.dest as NSString).appendingPathComponent(e.name))
+                    let url = URL(fileURLWithPath: e.movedPath)
                     let exists = FileManager.default.fileExists(atPath: url.path)
                     HStack(spacing: 12) {
                         Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
@@ -530,6 +533,14 @@ struct PresetEditor: View {
     }
 }
 
+/// 유리는 창이 키 겉모습을 잃으면 스스로 흐려진다. 유리일 때만 키 겉모습을 고정해 창을 옮겨도 유리가 남는다.
+/// (hasKeyAppearance 는 비공개 API — 이름이 바뀌면 호출이 안 될 뿐, 지금 동작으로 돌아간다.)
+final class GlassWindow: NSWindow {
+    @objc func hasKeyAppearance() -> Bool {
+        UserDefaults.standard.bool(forKey: settingsGlassKey) || isKeyWindow
+    }
+}
+
 final class SettingsWindow {
     static let shared = SettingsWindow()
     private let store = PresetStore()
@@ -543,8 +554,8 @@ final class SettingsWindow {
         if window == nil {
             let hosting = NSHostingView(rootView: SettingsView(model: model, store: store))
             self.hosting = hosting
-            let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView],
-                             backing: .buffered, defer: false)
+            let w = GlassWindow(contentRect: .zero, styleMask: [.titled, .closable, .fullSizeContentView],
+                                backing: .buffered, defer: false)
             w.titleVisibility = .hidden
             w.titlebarAppearsTransparent = true
             // 빈 툴바로 제목 표시줄을 높여 신호등 버튼이 탭과 같은 줄 가운데에 오게 한다.
